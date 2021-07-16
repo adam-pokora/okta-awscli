@@ -13,8 +13,8 @@ from oktaawscli.util import input
 
 class OktaAuth():
     """ Handles auth to Okta and returns SAML assertion """
-    def __init__(self, okta_profile, verbose, logger, totp_token, 
-        okta_auth_config, username, password, verify_ssl=True):
+    def __init__(self, okta_profile, verbose, logger, totp_token,
+        okta_auth_config, username, password, persistence, verify_ssl=True):
 
         self.okta_profile = okta_profile
         self.totp_token = totp_token
@@ -27,6 +27,7 @@ class OktaAuth():
         self.session = None
         self.session_token = ""
         self.session_id = ""
+        self.persistence = persistence
         self.https_base_url = "https://%s" % okta_auth_config.base_url_for(okta_profile)
         self.auth_url = "%s/api/v1/authn" % self.https_base_url
 
@@ -137,20 +138,43 @@ Please enroll an MFA factor in the Okta Web UI first!""")
         return self.get_saml_assertion(resp)
 
 
-    def get_saml_assertion(self, html):
+    def get_saml_assertion(self, html, force):
         """ Returns the SAML assertion from HTML """
         assertion = self.get_simple_assertion(html) or self.get_mfa_assertion(html)
 
         if not assertion:
-            self.logger.error("SAML assertion not valid: " + assertion)
-            sys.exit(-1)
+            self.logger.error("SAML assertion not valid: " + str(assertion))
+            if force:
+                sys.exit(-1)
         return assertion
 
+    def load_session_token(self):
+        with open(self.persistence,'r') as f:
+            st = f.readline().strip()
+            self.logger.info('Loading session token: %s' % st)
+            self.session = requests.Session()
+            return st
 
-    def get_assertion(self):
+    def set_session_id(self):
+        with open(self.persistence,'w') as f:
+            f.write(self.session_id)
+            self.logger.info('Saving session token: %s' % self.session_id)
+
+    def get_assertion(self, force = False):
         """ Main method to get SAML assertion from Okta """
-        self.session_token = self.primary_auth()
-        self.session_id = self.get_session(self.session_token)
+
+        if self.persistence and not force:
+            try:
+                self.session_id = self.load_session_token()
+            except:
+                self.logger.warn("No session found!")
+
+        if not self.session_id or force:
+            self.session_token = self.primary_auth()
+            self.session_id = self.get_session(self.session_token)
+            if self.persistence:
+                self.set_session_id()
+
         if not self.app_link:
             app_name, self.app_link = self.get_apps(self.session_id)
             self.okta_auth_config.write_applink_to_profile(self.okta_profile, self.app_link)
@@ -158,5 +182,5 @@ Please enroll an MFA factor in the Okta Web UI first!""")
             app_name = None
         self.session.cookies['sid'] = self.session_id
         resp = self.session.get(self.app_link)
-        assertion = self.get_saml_assertion(resp)
+        assertion = self.get_saml_assertion(resp, force)
         return app_name, assertion

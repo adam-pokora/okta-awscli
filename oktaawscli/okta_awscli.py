@@ -11,16 +11,18 @@ from oktaawscli.okta_auth_config import OktaAuthConfig
 from oktaawscli.aws_auth import AwsAuth
 
 def get_credentials(aws_auth, okta_profile, profile,
-                    verbose, logger, totp_token, cache, refresh_role, 
+                    verbose, logger, totp_token, cache, refresh_role, store,
                     okta_username=None, okta_password=None):
     """ Gets credentials from Okta """
 
     okta_auth_config = OktaAuthConfig(logger)
-    okta = OktaAuth(okta_profile, verbose, logger, totp_token, 
-        okta_auth_config, okta_username, okta_password)
+    okta = OktaAuth(okta_profile, verbose, logger, totp_token,
+        okta_auth_config, okta_username, okta_password, store)
 
-
+    assertion = None
     _, assertion = okta.get_assertion()
+    if not assertion and store:
+        _,assertion = okta.get_assertion(True)
     role = aws_auth.choose_aws_role(assertion, refresh_role)
     principal_arn, role_arn = role
 
@@ -83,6 +85,7 @@ created. If omitted, credentials will output to console.\n")
 @click.option('-c', '--cache', is_flag=True, help='Cache the default profile credentials \
 to ~/.okta-credentials.cache\n')
 @click.option('-r', '--refresh-role', is_flag=True, help='Refreshes the AWS role to be assumed')
+@click.option('-s', '--store' , help='Use this file to store session')
 @click.option('-t', '--token', help='TOTP token from your authenticator app')
 @click.option('-l', '--lookup', is_flag=True, help='Look up AWS account names')
 @click.option('-U', '--username', 'okta_username', help="Okta username")
@@ -90,7 +93,7 @@ to ~/.okta-credentials.cache\n')
 @click.argument('awscli_args', nargs=-1, type=click.UNPROCESSED)
 def main(okta_profile, profile, verbose, version,
          debug, force, cache, lookup, awscli_args,
-         refresh_role, token, okta_username, okta_password):
+         refresh_role, token, store, okta_username, okta_password):
     """ Authenticate to awscli using Okta """
     if version:
         print(__version__)
@@ -118,7 +121,7 @@ def main(okta_profile, profile, verbose, version,
             logger.info("Force option selected, \
                 getting new credentials anyway.")
         get_credentials(
-            aws_auth, okta_profile, profile, verbose, logger, token, cache, refresh_role, okta_username, okta_password
+            aws_auth, okta_profile, profile, verbose, logger, token, cache, refresh_role, store, okta_username, okta_password
         )
 
     if awscli_args:
