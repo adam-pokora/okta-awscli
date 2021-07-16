@@ -69,6 +69,7 @@ Optional flags:
 - `--token` or `-t` Pass in the TOTP token from your authenticator
 - `--refresh-role` or `-r` Refresh the AWS role to be assumed. Previously incorporated in `--force`.
 - `--lookup` or `-l` Lookup and return the AWS Account Alias for each role, instead of returning the raw ARN. 
+- `--store` or `-s` Store okta session in the file path until it expires. It will read the session and try to use it, if it fails, normal auth is performed. 
   - Note that this will attempt to perform `iam:ListAccountAliases` on every account that you have access to via Okta. This is important for two reasons:
     - All of your roles must have this permission attached to it via an IAM policy.
     - This may be important for you, if you have compliance considerations around only accessing accounts that you're actively doing work in.
